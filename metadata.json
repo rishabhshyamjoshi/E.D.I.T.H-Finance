@@ -1,0 +1,5 @@
+{
+  "name": "E.D.I.T.H. Tactical Interface",
+  "description": "Even Dead, I'm The Hero. A futuristic Stark-tech tactical intelligence interface powered by Gemini.",
+  "requestFramePermissions": ["camera", "microphone"]
+}
