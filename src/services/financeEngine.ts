@@ -11,20 +11,6 @@ export interface FinanceProfile {
   pastTrends: string;
 }
 
-export const SHOCK_EVENTS = [
-  "Job Loss (zero income for 6 months)",
-  "Sudden Medical Emergency (high hospital bills)",
-  "Missed Annual Appraisal / Salary Freeze",
-  "Major Market Crash (-20% portfolio value)",
-  "Unexpected Car/Home Repair",
-  "Legal/Compliance Fees",
-  "Family Emergency (supporting a relative)",
-  "High Inflation Spike (+5% cost of living)",
-  "Tax Policy Change (higher tax bracket)",
-  "Identity Theft / Fraud Recovery"
-];
-
-// 1. Synthetic Data Generator (Raw)
 export const generateRawClientData = (): string => {
   const jobs = ["Software Engineer", "Doctor", "Small Business Owner", "Teacher", "Investment Banker"];
   const job = jobs[Math.floor(Math.random() * jobs.length)];
@@ -36,11 +22,8 @@ export const generateRawClientData = (): string => {
   return `Client is a ${age}-year-old ${job}. They make roughly $${baseSalary} per year. They have $${savings} in savings and $${investments} in various investments like index funds and some stocks. They spend about 60% of their monthly income on living expenses. They want to buy a house in 5 years and retire at 60. They have panicked in past market crashes and sold off stocks, indicating they might be risk-averse, though they claim to want high growth.`;
 };
 
-// 1.5. Profile Engine (Computes Net Worth, Income, Risk from Raw Data)
 export const computeProfileFromData = async (rawData: string): Promise<FinanceProfile> => {
   const ai = getAIInstance();
-  const model = "gemini-3-flash-preview";
-  
   const prompt = `You are the Profile Engine. Extract and compute a structured financial profile from the following raw client data.
   
   RAW DATA:
@@ -48,139 +31,118 @@ export const computeProfileFromData = async (rawData: string): Promise<FinancePr
   
   Compute the Net Worth (savings + investments + other assets), Monthly Income (annual / 12), and Monthly Expenses. Determine their true Risk Appetite (Beginner, Moderate, Aggressive) based on their behavior, not just what they claim.
   
-  Output ONLY a JSON object matching this TypeScript interface exactly:
+  Return ONLY valid JSON matching this schema:
   {
-    "name": string,
-    "age": number,
-    "netWorth": number,
-    "monthlyIncome": number,
-    "monthlyExpenses": number,
+    "name": "String",
+    "age": Number,
+    "netWorth": Number,
+    "monthlyIncome": Number,
+    "monthlyExpenses": Number,
     "riskAppetite": "Beginner" | "Moderate" | "Aggressive",
-    "goals": string[],
-    "pastTrends": string
-  }`;
-
-  try {
-    const response = await ai.models.generateContent({
-      model,
-      contents: [{ parts: [{ text: prompt }] }],
-      config: { responseMimeType: "application/json" }
-    });
-    const result = JSON.parse(response.text || "{}");
-    return {
-      name: result.name || "Synthetic Client",
-      age: result.age || 30,
-      netWorth: result.netWorth || 0,
-      monthlyIncome: result.monthlyIncome || 0,
-      monthlyExpenses: result.monthlyExpenses || 0,
-      riskAppetite: result.riskAppetite || "Moderate",
-      goals: result.goals || [],
-      pastTrends: result.pastTrends || "No historical data."
-    } as FinanceProfile;
-  } catch (err) {
-    console.error("Profile Engine Error:", err);
-    return {
-      name: "Fallback Client", age: 30, netWorth: 100000, monthlyIncome: 5000, monthlyExpenses: 3000, riskAppetite: 'Moderate', goals: [], pastTrends: ''
-    };
+    "goals": ["Goal1", "Goal2"],
+    "pastTrends": "Brief summary of past financial behavior"
   }
+  Do not include markdown blocks, just the JSON string.`;
+
+  const response = await ai.models.generateContent({
+    model: "gemini-3.6-flash",
+    contents: prompt
+  });
+  
+  const text = response.text || '';
+  const cleanJson = text.replace(/```json/g, '').replace(/```/g, '').trim();
+  return JSON.parse(cleanJson);
 };
 
-// 2. Orchestrator Agent
-export const orchestrateFinancePlan = async (profile: FinanceProfile, shocks: string[] = []): Promise<string> => {
+export const orchestrateFinancePlan = async (profile: FinanceProfile, selectedShocks: string[] = []): Promise<string> => {
   const ai = getAIInstance();
-  const model = "gemini-3-flash-preview";
-
-  let prompt = `You are the Orchestrator Agent. Your job is to create a robust financial plan for the following client:\n`;
-  prompt += JSON.stringify(profile, null, 2);
+  const shockText = selectedShocks.length > 0 ? `They are also facing these unexpected shock events: ${selectedShocks.join(', ')}.` : '';
+  const prompt = `You are the Orchestrator (Lead Financial Strategist).
   
-  if (shocks.length > 0) {
-    prompt += `\n\nSTRESS TEST - Apply these shocks to the plan:\n- ${shocks.join('\n- ')}\n`;
-  }
+  Client Profile:
+  Name: ${profile.name} (Age ${profile.age})
+  Net Worth: $${profile.netWorth}
+  Monthly Income: $${profile.monthlyIncome}
+  Monthly Expenses: $${profile.monthlyExpenses}
+  Risk Appetite: ${profile.riskAppetite}
+  Goals: ${profile.goals.join(', ')}
+  Past Trends: ${profile.pastTrends}
+  ${shockText}
   
-  prompt += `\nGenerate 2-3 structured financial plan options based on the data. Include specific numbers and projected values based on the profile data. Format clearly with numbers that can be verified later.`;
+  Generate a comprehensive, expert-level financial plan (Markdown format). Include exact numeric allocations for savings, emergency funds, and investments based on their risk appetite. If there are shocks, explicitly address how the plan mitigates them.`;
 
-  try {
-    const response = await ai.models.generateContent({
-      model,
-      contents: [{ parts: [{ text: prompt }] }],
-      config: { systemInstruction: "You are an expert banking Relationship Manager backend engine." }
-    });
-    return response.text || "Failed to generate plan.";
-  } catch (err) {
-    console.error("Orchestrator Error:", err);
-    return "Error in Orchestrator Engine.";
-  }
+  const response = await ai.models.generateContent({
+    model: "gemini-3.6-flash",
+    contents: prompt
+  });
+  
+  return response.text || 'Failed to generate plan.';
 };
 
-// 3. Explanation Agent
-export const generateExplanation = async (rawEnginePlan: string): Promise<string> => {
+export const generateExplanation = async (rawPlan: string): Promise<string> => {
   const ai = getAIInstance();
-  const model = "gemini-3-flash-preview";
+  const prompt = `You are the Explainer (Client-facing AI).
+  
+  Here is a complex financial plan generated by the Orchestrator:
+  ${rawPlan}
+  
+  Translate this plan into a simple, easy-to-understand summary for the client. Use bullet points and clear, encouraging language. Remove complex jargon. (Markdown format)`;
 
-  const prompt = `You are the Explanation Agent. Take this raw engine output and turn it into highly readable, empathetic, and clear plain text for a customer. Make it sound professional yet accessible.\n\nRAW DATA:\n${rawEnginePlan}`;
-
-  try {
-    const response = await ai.models.generateContent({
-      model,
-      contents: [{ parts: [{ text: prompt }] }]
-    });
-    return response.text || "Failed to generate explanation.";
-  } catch (err) {
-    console.error("Explanation Agent Error:", err);
-    return "Error in Explanation Agent.";
-  }
+  const response = await ai.models.generateContent({
+    model: "gemini-3.6-flash",
+    contents: prompt
+  });
+  
+  return response.text || 'Failed to generate explanation.';
 };
 
-// 4. Verifier Agent
-export const verifyNumbers = async (enginePlan: string, explanation: string): Promise<{ verified: boolean, message: string }> => {
+export const verifyNumbers = async (rawPlan: string, explanation: string): Promise<{ verified: boolean; message: string; data: any }> => {
   const ai = getAIInstance();
-  const model = "gemini-3-flash-preview";
-
-  const prompt = `You are the Verifier Agent. Extract every number from the Customer Explanation and check if it aligns with the Raw Engine Plan. Do not allow hallucinations.
+  const prompt = `You are the Verifier (Auditor AI).
   
-  RAW ENGINE PLAN:
-  ${enginePlan}
+  Raw Plan:
+  ${rawPlan}
   
-  CUSTOMER EXPLANATION:
+  Explanation provided to client:
   ${explanation}
   
-  Output a JSON object with two fields:
-  "verified": boolean (true if all numbers match and are accurate, false if there is a hallucination or mismatch)
-  "message": string (a brief report of the verification process, highlighting any errors found).
-  Output only valid JSON.`;
+  Task:
+  1. Audit the numbers to ensure they match mathematically (e.g. percentages add up, allocations do not exceed income).
+  2. Ensure the explanation does not hallucinate facts not present in the Raw Plan.
+  
+  Return ONLY valid JSON matching this schema:
+  {
+    "verified": boolean,
+    "message": "String explaining the audit result",
+    "data": { "issuesFound": number }
+  }`;
 
-  try {
-    const response = await ai.models.generateContent({
-      model,
-      contents: [{ parts: [{ text: prompt }] }],
-      config: { responseMimeType: "application/json" }
-    });
-    const result = JSON.parse(response.text || "{}");
-    return {
-      verified: result.verified ?? false,
-      message: result.message ?? "Verification failed to parse."
-    };
-  } catch (err) {
-    console.error("Verifier Agent Error:", err);
-    return { verified: false, message: "Verifier Agent encountered an error." };
-  }
+  const response = await ai.models.generateContent({
+    model: "gemini-3.6-flash",
+    contents: prompt
+  });
+  
+  const text = response.text || '';
+  const cleanJson = text.replace(/```json/g, '').replace(/```/g, '').trim();
+  return JSON.parse(cleanJson);
 };
 
-// 5. Challenger Agent
-export const generateChallenge = async (profile: FinanceProfile, chosenPlan: string): Promise<string> => {
+export const generateChallenge = async (profile: FinanceProfile, rawPlan: string): Promise<string> => {
   const ai = getAIInstance();
-  const model = "gemini-3-flash-preview";
+  const prompt = `You are the Challenger (Devil's Advocate AI).
+  
+  Client Profile:
+  Age: ${profile.age}, Net Worth: $${profile.netWorth}, Income: $${profile.monthlyIncome}, Risk: ${profile.riskAppetite}
+  
+  Proposed Plan:
+  ${rawPlan}
+  
+  Critique this plan. What are the hidden risks? What happens if the market crashes? Is the risk appetite too high/low for their goals? Provide 3 sharp, critical bullet points. (Markdown format)`;
 
-  const prompt = `You are the Challenger Agent. The customer is leaning towards the following financial plan:\n\n${chosenPlan}\n\nTheir profile is: ${JSON.stringify(profile)}\n\nYour job is to argue AGAINST this plan using evidence. Point out the biggest risks, flaws, or alternative scenarios where this plan completely fails. Be critical, analytical, and professional, acting as a "devil's advocate" stress test for their decision.`;
-
-  try {
-    const response = await ai.models.generateContent({
-      model,
-      contents: [{ parts: [{ text: prompt }] }]
-    });
-    return response.text || "Failed to generate challenge.";
-  } catch (err) {
-    console.error("Challenger Agent Error:", err);
-    return "Error in Challenger Agent.";
-  }
+  const response = await ai.models.generateContent({
+    model: "gemini-3.6-flash",
+    contents: prompt
+  });
+  
+  return response.text || 'Failed to generate challenge.';
 };

@@ -1,8 +1,6 @@
 import { GoogleGenAI, Modality } from "@google/genai";
 
-const apiKey = typeof process !== 'undefined' && process.env?.GEMINI_API_KEY 
-  ? process.env.GEMINI_API_KEY 
-  : '';
+const apiKey = process.env.GEMINI_API_KEY || '';
 
 let ai: GoogleGenAI;
 
@@ -35,7 +33,7 @@ Maintain a polished, confident, and empathetic tone when discussing financial ma
 
 export async function chatWithAura(message: string, history: { role: 'user' | 'model', parts: { text: string }[] }[] = []) {
   const client = getAI();
-  const model = "gemini-3-flash-preview";
+  const model = "gemini-3.6-flash";
   
   const chat = client.chats.create({
     model,

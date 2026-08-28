@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, Component, ErrorInfo, ReactNode } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Activity, 
@@ -18,7 +18,38 @@ import {
 import ReactMarkdown from 'react-markdown';
 import { cn } from '@/src/lib/utils';
 import { chatWithAura, speakWithAura, ai, SYSTEM_INSTRUCTION } from './services/gemini';
-import { Modality } from "@google/genai";
+
+class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean, error: Error | null }> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error("ErrorBoundary caught an error", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-10 text-red-500 bg-red-100 rounded-lg m-10 border border-red-300">
+          <h2 className="text-2xl font-bold mb-4">UI Crashed!</h2>
+          <p className="font-mono text-sm">{this.state.error?.toString()}</p>
+          <pre className="mt-4 text-xs bg-black/10 p-4 rounded overflow-auto max-h-[300px]">
+            {this.state.error?.stack}
+          </pre>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+import { Modality, Type } from "@google/genai";
 import { FinancePanel } from './components/FinancePanel';
 
 interface Message {
@@ -103,10 +134,33 @@ export default function App() {
           speechConfig: {
             voiceConfig: { prebuiltVoiceConfig: { voiceName: "Aoede" } },
           },
+          tools: [{
+            functionDeclarations: [
+              { name: 'execute_agents', description: 'Executes the AI agents to generate the interactive financial plan for the user.' },
+              { name: 'change_mode', description: 'Changes the profile mode to either synthetic, manual, or parse.', parameters: { type: Type.OBJECT, properties: { mode: { type: Type.STRING } }, required: ['mode'] } },
+              { name: 'generate_synthetic_profile', description: 'Generates a random synthetic profile for the user.' },
+              { name: 'parse_notes', description: 'Parses the user provided raw notes into a structured profile.' }
+            ]
+          }]
         },
         callbacks: {
           onopen: () => setIsLiveMode(true),
           onmessage: async (message) => {
+            const funcCall = message.serverContent?.modelTurn?.parts?.[0]?.functionCall;
+            if (funcCall) {
+              window.dispatchEvent(new CustomEvent('aura_voice_command', { detail: { name: funcCall.name, args: funcCall.args } }));
+              let resultStr = `Command ${funcCall.name} dispatched to the UI successfully. Please tell the user that the UI is updating.`;
+              if (funcCall.name === 'generate_synthetic_profile') {
+                resultStr = `Command executed successfully. You MUST say exactly this phrase to the user and nothing else: "I have generated it and I have started the execution."`;
+              }
+              (session as any).sendToolResponse({
+                functionResponses: [{
+                  id: funcCall.id,
+                  name: funcCall.name,
+                  response: { result: resultStr }
+                }]
+              });
+            }
             if (message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data) {
               playLiveAudio(message.serverContent.modelTurn.parts[0].inlineData.data);
             }
@@ -134,7 +188,10 @@ export default function App() {
       };
 
       source.connect(processor);
-      processor.connect(audioContext.destination);
+      const gainNode = audioContext.createGain();
+      gainNode.gain.value = 0;
+      processor.connect(gainNode);
+      gainNode.connect(audioContext.destination);
 
     } catch (err) {
       console.error("Failed to start live session:", err);
@@ -290,7 +347,9 @@ export default function App() {
         
         {/* Left/Center: Finance Dashboard (Agent flows & profile) */}
         <div className="flex-1 flex flex-col rounded-xl overflow-hidden glass-panel">
-          <FinancePanel />
+          <ErrorBoundary>
+            <FinancePanel />
+          </ErrorBoundary>
         </div>
 
         {/* Right: Aura AI Assistant Sidebar */}
