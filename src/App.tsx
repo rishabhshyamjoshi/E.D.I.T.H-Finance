@@ -1,38 +1,22 @@
 import React, { useState, useEffect, useRef, Component, ErrorInfo, ReactNode } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion } from 'motion/react';
 import { 
-  Activity, 
-  MessageSquare, 
-  Send, 
-  Settings,
-  Mic,
-  MicOff,
-  Volume2,
-  VolumeX,
-  Radio,
-  Headphones,
-  Briefcase,
-  Clock,
-  ShieldCheck
+  MessageSquare, Send, Settings, Volume2, VolumeX, Radio, Headphones, Briefcase, Clock
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { cn } from '@/src/lib/utils';
-import { chatWithAura, speakWithAura, ai, SYSTEM_INSTRUCTION } from './services/gemini';
+import { chatWithAura, speakWithAura } from './services/gemini';
+import { FinancePanel } from './components/FinancePanel';
+import { useLiveAudio } from './hooks/useLiveAudio';
+import { STORAGE_KEYS } from './config/constants';
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean, error: Error | null }> {
   constructor(props: { children: ReactNode }) {
     super(props);
     this.state = { hasError: false, error: null };
   }
-
-  static getDerivedStateFromError(error: Error) {
-    return { hasError: true, error };
-  }
-
-  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error("ErrorBoundary caught an error", error, errorInfo);
-  }
-
+  static getDerivedStateFromError(error: Error) { return { hasError: true, error }; }
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) { console.error("ErrorBoundary caught an error", error, errorInfo); }
   render() {
     if (this.state.hasError) {
       return (
@@ -49,62 +33,27 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boole
   }
 }
 
-import { Modality, Type } from "@google/genai";
-import { FinancePanel } from './components/FinancePanel';
-
-interface Message {
-  role: 'user' | 'model';
-  text: string;
-}
-
-const getFormattedTime = (date = new Date()) => new Intl.DateTimeFormat('en-US', {
-  hour: '2-digit',
-  minute: '2-digit',
-  second: '2-digit',
-  hour12: true,
-}).format(date);
-
-const getFormattedDate = (date = new Date()) => new Intl.DateTimeFormat('en-US', {
-  weekday: 'short',
-  day: '2-digit',
-  month: 'short',
-  year: 'numeric',
-}).format(date);
+const getFormattedTime = (date = new Date()) => new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }).format(date);
+const getFormattedDate = (date = new Date()) => new Intl.DateTimeFormat('en-US', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' }).format(date);
 
 export default function App() {
-  const [messages, setMessages] = useState<Message[]>(() => {
-    const saved = localStorage.getItem('aura_messages');
-    return saved ? JSON.parse(saved) : [
-      { role: 'model', text: 'Aura Financial Systems online. Voice interface initialized. How can I assist you with client portfolios today?' }
-    ];
-  });
+  const { messages, setMessages, isLiveMode, startLiveSession, stopLiveSession } = useLiveAudio();
   
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [currentTime, setCurrentTime] = useState(() => getFormattedTime());
   const [currentDate, setCurrentDate] = useState(() => getFormattedDate());
-  const [isListening, setIsListening] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(true);
-  const [isLiveMode, setIsLiveMode] = useState(false);
   const [isAssistantOpen, setIsAssistantOpen] = useState(false);
   
   const chatEndRef = useRef<HTMLDivElement>(null);
-  const recognitionRef = useRef<any>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const liveSessionRef = useRef<any>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const processorRef = useRef<ScriptProcessorNode | null>(null);
-  const outputAudioContextRef = useRef<AudioContext | null>(null);
-  const nextStartTimeRef = useRef<number>(0);
-
-  useEffect(() => {
-    localStorage.setItem('aura_messages', JSON.stringify(messages));
-  }, [messages]);
 
   useEffect(() => {
     const timer = setInterval(() => {
-      setCurrentTime(getFormattedTime());
-      setCurrentDate(getFormattedDate());
+      const now = new Date();
+      setCurrentTime(getFormattedTime(now));
+      setCurrentDate(getFormattedDate(now));
     }, 1000);
     return () => clearInterval(timer);
   }, []);
@@ -113,184 +62,50 @@ export default function App() {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const startLiveSession = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const audioContext = new AudioContext({ sampleRate: 16000 });
-      audioContextRef.current = audioContext;
-      
-      outputAudioContextRef.current = new AudioContext({ sampleRate: 24000 });
-      nextStartTimeRef.current = 0;
-
-      const source = audioContext.createMediaStreamSource(stream);
-      const processor = audioContext.createScriptProcessor(4096, 1, 1);
-      processorRef.current = processor;
-
-      const session = await ai.live.connect({
-        model: "gemini-3.1-flash-live-preview",
-        config: {
-          responseModalities: [Modality.AUDIO],
-          systemInstruction: SYSTEM_INSTRUCTION,
-          speechConfig: {
-            voiceConfig: { prebuiltVoiceConfig: { voiceName: "Aoede" } },
-          },
-          tools: [{
-            functionDeclarations: [
-              { name: 'execute_agents', description: 'Executes the AI agents to generate the interactive financial plan for the user.' },
-              { name: 'change_mode', description: 'Changes the profile mode to either synthetic, manual, or parse.', parameters: { type: Type.OBJECT, properties: { mode: { type: Type.STRING } }, required: ['mode'] } },
-              { name: 'generate_synthetic_profile', description: 'Generates a random synthetic profile for the user.' },
-              { name: 'parse_notes', description: 'Parses the user provided raw notes into a structured profile.' }
-            ]
-          }]
-        },
-        callbacks: {
-          onopen: () => setIsLiveMode(true),
-          onmessage: async (message) => {
-            const funcCall = message.serverContent?.modelTurn?.parts?.[0]?.functionCall;
-            if (funcCall) {
-              window.dispatchEvent(new CustomEvent('aura_voice_command', { detail: { name: funcCall.name, args: funcCall.args } }));
-              let resultStr = `Command ${funcCall.name} dispatched to the UI successfully. Please tell the user that the UI is updating.`;
-              if (funcCall.name === 'generate_synthetic_profile') {
-                resultStr = `Command executed successfully. You MUST say exactly this phrase to the user and nothing else: "I have generated it and I have started the execution."`;
-              }
-              (session as any).sendToolResponse({
-                functionResponses: [{
-                  id: funcCall.id,
-                  name: funcCall.name,
-                  response: { result: resultStr }
-                }]
-              });
-            }
-            if (message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data) {
-              playLiveAudio(message.serverContent.modelTurn.parts[0].inlineData.data);
-            }
-            if (message.serverContent?.modelTurn?.parts?.[0]?.text) {
-              setMessages(prev => [...prev, { role: 'model', text: message.serverContent!.modelTurn!.parts[0].text! }]);
-            }
-            if (message.serverContent?.interrupted) {
-              stopLiveAudio();
-            }
-          },
-          onclose: () => stopLiveSession(),
-          onerror: (err) => stopLiveSession()
-        }
-      });
-
-      liveSessionRef.current = session;
-
-      processor.onaudioprocess = (e) => {
-        const inputData = e.inputBuffer.getChannelData(0);
-        const pcmData = floatTo16BitPCM(inputData);
-        const base64Data = btoa(String.fromCharCode(...new Uint8Array(pcmData)));
-        session.sendRealtimeInput({
-          audio: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
-        });
-      };
-
-      source.connect(processor);
-      const gainNode = audioContext.createGain();
-      gainNode.gain.value = 0;
-      processor.connect(gainNode);
-      gainNode.connect(audioContext.destination);
-
-    } catch (err) {
-      console.error("Failed to start live session:", err);
-      setMessages(prev => [...prev, { role: 'model', text: 'Error: Voice link failed.' }]);
+  // Load initial messages if not live (or rely on useLiveAudio if we move local storage there).
+  // For simplicity, we initialize messages here once on mount.
+  useEffect(() => {
+    if (messages.length === 0) {
+      const saved = localStorage.getItem('aura_messages');
+      if (saved) {
+        setMessages(JSON.parse(saved));
+      } else {
+        setMessages([{ role: 'model', text: 'Aura Financial Systems online. Voice interface initialized. How can I assist you with client portfolios today?' }]);
+      }
     }
-  };
+  }, []);
 
-  const stopLiveSession = () => {
-    liveSessionRef.current?.close();
-    liveSessionRef.current = null;
-    processorRef.current?.disconnect();
-    processorRef.current = null;
-    audioContextRef.current?.close();
-    audioContextRef.current = null;
-    outputAudioContextRef.current?.close();
-    outputAudioContextRef.current = null;
-    setIsLiveMode(false);
-  };
-
-  const floatTo16BitPCM = (input: Float32Array) => {
-    const output = new Int16Array(input.length);
-    for (let i = 0; i < input.length; i++) {
-      const s = Math.max(-1, Math.min(1, input[i]));
-      output[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+  useEffect(() => {
+    if (messages.length > 0) {
+      localStorage.setItem('aura_messages', JSON.stringify(messages));
     }
-    return output.buffer;
-  };
+  }, [messages]);
 
-  const playLiveAudio = (base64Data: string) => {
-    const binary = atob(base64Data);
-    const buffer = new ArrayBuffer(binary.length);
-    const bytes = new Uint8Array(buffer);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  const handleSend = async (text: string = input) => {
+    if (!text.trim()) return;
     
-    const int16Data = new Int16Array(buffer);
-    const float32Data = new Float32Array(int16Data.length);
-    for (let i = 0; i < int16Data.length; i++) {
-      float32Data[i] = int16Data[i] / 32768;
-    }
-
-    const ctx = outputAudioContextRef.current;
-    if (!ctx) return;
-
-    const audioBuffer = ctx.createBuffer(1, float32Data.length, 24000);
-    audioBuffer.getChannelData(0).set(float32Data);
-
-    const source = ctx.createBufferSource();
-    source.buffer = audioBuffer;
-    source.connect(ctx.destination);
-
-    const startTime = Math.max(ctx.currentTime, nextStartTimeRef.current);
-    source.start(startTime);
-    nextStartTimeRef.current = startTime + audioBuffer.duration;
-  };
-
-  const stopLiveAudio = () => {
-    outputAudioContextRef.current?.close();
-    outputAudioContextRef.current = new AudioContext({ sampleRate: 24000 });
-    nextStartTimeRef.current = 0;
-  };
-
-  const playVoice = async (text: string) => {
-    if (!voiceEnabled || isLiveMode) return;
+    setInput('');
+    setMessages(prev => [...prev, { role: 'user', text }]);
+    setIsTyping(true);
+    
     try {
-      const audioUrl = await speakWithAura(text);
-      if (audioUrl) {
-        if (audioRef.current) {
-          audioRef.current.src = audioUrl;
-          audioRef.current.play();
-        } else {
-          const audio = new Audio(audioUrl);
+      const currentHistory = messages.slice(1).map(m => ({
+        role: m.role,
+        parts: [{ text: m.text }]
+      }));
+      const responseText = await chatWithAura(text, currentHistory);
+      setMessages(prev => [...prev, { role: 'model', text: responseText }]);
+      
+      if (voiceEnabled) {
+        const audioUri = await speakWithAura(responseText);
+        if (audioUri) {
+          const audio = new Audio(audioUri);
           audioRef.current = audio;
           audio.play();
         }
       }
-    } catch (err) {
-      console.error("TTS Error:", err);
-    }
-  };
-
-  const handleSend = async (overrideInput?: string) => {
-    const userMsg = overrideInput || input;
-    if (!userMsg.trim()) return;
-
-    if (!overrideInput) setInput('');
-    setMessages(prev => [...prev, { role: 'user', text: userMsg }]);
-    setIsTyping(true);
-
-    try {
-      const history = messages.map(m => ({
-        role: m.role,
-        parts: [{ text: m.text }]
-      }));
-      const responseText = await chatWithAura(userMsg, history);
-      
-      setMessages(prev => [...prev, { role: 'model', text: responseText }]);
-      playVoice(responseText);
-    } catch (err) {
-      setMessages(prev => [...prev, { role: 'model', text: 'Error connecting to Aura servers.' }]);
+    } catch (error) {
+      setMessages(prev => [...prev, { role: 'model', text: "Error: Could not process request." }]);
     } finally {
       setIsTyping(false);
     }
@@ -298,7 +113,6 @@ export default function App() {
 
   return (
     <div className="h-screen w-screen bg-transparent flex flex-col font-sans">
-      {/* Top Header */}
       <header className="glass-header px-6 py-4 flex justify-between items-center z-10">
         <div className="flex items-center gap-3">
           <div className="bg-emerald-500/20 p-2 rounded-lg border border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.2)]">
@@ -342,17 +156,14 @@ export default function App() {
         </div>
       </header>
 
-      {/* Main Content Workspace */}
       <div className="flex-1 overflow-hidden p-6 gap-6 flex">
         
-        {/* Left/Center: Finance Dashboard (Agent flows & profile) */}
         <div className="flex-1 flex flex-col rounded-xl overflow-hidden glass-panel">
           <ErrorBoundary>
             <FinancePanel />
           </ErrorBoundary>
         </div>
 
-        {/* Right: Aura AI Assistant Sidebar */}
         {isAssistantOpen && (
           <div className="w-[400px] flex flex-col glass-panel rounded-xl overflow-hidden">
             <div className="p-4 border-b border-white/10 bg-slate-950/40 flex justify-between items-center backdrop-blur-md">
@@ -424,7 +235,6 @@ export default function App() {
           </div>
         </div>
         )}
-
       </div>
     </div>
   );
