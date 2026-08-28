@@ -82,7 +82,7 @@ export const useLiveAudio = () => {
         model: GEMINI_MODELS.LIVE,
         config: {
           responseModalities: [Modality.AUDIO],
-          systemInstruction: SYSTEM_INSTRUCTION,
+          systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTION }] },
           speechConfig: {
             voiceConfig: { prebuiltVoiceConfig: { voiceName: "Aoede" } },
           },
@@ -110,7 +110,8 @@ export const useLiveAudio = () => {
                       name: funcCall.name, 
                       args: funcCall.args,
                       callback: (profileData: any) => {
-                         (session as any).sendToolResponse({
+                         if (!liveSessionRef.current) return;
+                         (liveSessionRef.current as any).sendToolResponse({
                            functionResponses: [{
                              id: funcCall.id,
                              name: funcCall.name,
@@ -124,13 +125,15 @@ export const useLiveAudio = () => {
                 }
                 window.dispatchEvent(new CustomEvent('aura_voice_command', { detail: { name: funcCall.name, args: funcCall.args } }));
                 const resultStr = `Command ${funcCall.name} dispatched to the UI successfully. Please tell the user that the UI is updating.`;
-                (session as any).sendToolResponse({
-                  functionResponses: [{
-                    id: funcCall.id,
-                    name: funcCall.name,
-                    response: { result: resultStr }
-                  }]
-                });
+                if (liveSessionRef.current) {
+                  (liveSessionRef.current as any).sendToolResponse({
+                    functionResponses: [{
+                      id: funcCall.id,
+                      name: funcCall.name,
+                      response: { result: resultStr }
+                    }]
+                  });
+                }
               }
               // Handle audio output
               if (part.inlineData?.data) {
@@ -147,32 +150,61 @@ export const useLiveAudio = () => {
             }
           },
           onclose: () => stopLiveSession(),
-          onerror: () => stopLiveSession()
+          onerror: (err: any) => {
+             console.error("Live API Error:", err);
+             stopLiveSession();
+          }
         }
       });
 
       liveSessionRef.current = session;
 
+      let audioBuffer: number[] = [];
       workletNode.port.onmessage = (event) => {
+        if (!liveSessionRef.current) return;
+        
         const rawBuffer = event.data;
-        let binary = '';
         const bytes = new Uint8Array(rawBuffer);
         for (let i = 0; i < bytes.byteLength; i++) {
-          binary += String.fromCharCode(bytes[i]);
+          audioBuffer.push(bytes[i]);
         }
-        const base64Data = btoa(binary);
         
-        session.sendRealtimeInput({
-          audio: { data: base64Data, mimeType: `audio/pcm;rate=${AUDIO_CONFIG.INPUT_SAMPLE_RATE}` }
-        });
+        if (audioBuffer.length >= 4096) {
+          const chunk = audioBuffer.slice(0, 4096);
+          audioBuffer = audioBuffer.slice(4096);
+          
+          let binary = '';
+          for (let i = 0; i < chunk.length; i++) {
+            binary += String.fromCharCode(chunk[i]);
+          }
+          const base64Data = btoa(binary);
+          
+          try {
+            liveSessionRef.current.sendRealtimeInput({
+              audio: {
+                mimeType: `audio/pcm;rate=${AUDIO_CONFIG.INPUT_SAMPLE_RATE}`,
+                data: base64Data
+              }
+            });
+          } catch (e) {
+            // Ignore send errors if closing
+          }
+        }
       };
 
       source.connect(workletNode);
-      // We don't connect workletNode to destination because we don't want audio feedback!
+      workletNode.connect(audioContext.destination);
       
     } catch (err: any) {
       console.error("Failed to start live session:", err);
-      const errorMsg = err?.message || err?.toString() || 'Unknown error';
+      let errorMsg = err?.message || err?.toString() || 'Unknown error';
+      
+      if (!navigator.mediaDevices) {
+        errorMsg = "Microphone access blocked. If using a network IP, switch to localhost or HTTPS.";
+      }
+      
+      window.alert(`❌ Voice connection failed:\n\n${errorMsg}`);
+      
       setMessages(prev => [...prev, { role: 'model', text: `❌ Voice link failed: ${errorMsg}. Check browser console for details.` }]);
       setIsLiveMode(false);
     }

@@ -1,7 +1,7 @@
 export const GEMINI_MODELS = {
-  DEFAULT: 'gemini-2.5-flash',
+  DEFAULT: 'gemini-3.6-flash',
   TTS: 'gemini-2.5-flash-preview-tts',
-  LIVE: 'gemini-2.0-flash-live-001',
+  LIVE: 'gemini-3.1-flash-live-preview',
 };
 
 export const AUDIO_CONFIG = {
