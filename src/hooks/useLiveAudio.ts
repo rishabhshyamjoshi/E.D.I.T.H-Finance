@@ -17,8 +17,9 @@ export const useLiveAudio = () => {
   const workletNodeRef = useRef<AudioWorkletNode | null>(null);
   const outputAudioContextRef = useRef<AudioContext | null>(null);
   const nextStartTimeRef = useRef<number>(0);
+  const activeSourcesRef = useRef<AudioBufferSourceNode[]>([]);
 
-  const playLiveAudio = (base64Data: string) => {
+  const playLiveAudio = async (base64Data: string) => {
     const binary = atob(base64Data);
     const buffer = new ArrayBuffer(binary.length);
     const bytes = new Uint8Array(buffer);
@@ -32,6 +33,14 @@ export const useLiveAudio = () => {
 
     const ctx = outputAudioContextRef.current;
     if (!ctx) return;
+    
+    try {
+      if (ctx.state === 'suspended') {
+        await ctx.resume();
+      }
+    } catch (e) {
+      console.error("Failed to resume AudioContext:", e);
+    }
 
     const audioBuffer = ctx.createBuffer(1, float32Data.length, AUDIO_CONFIG.SAMPLE_RATE);
     audioBuffer.getChannelData(0).set(float32Data);
@@ -39,6 +48,11 @@ export const useLiveAudio = () => {
     const source = ctx.createBufferSource();
     source.buffer = audioBuffer;
     source.connect(ctx.destination);
+    
+    activeSourcesRef.current.push(source);
+    source.onended = () => {
+      activeSourcesRef.current = activeSourcesRef.current.filter(s => s !== source);
+    };
 
     const startTime = Math.max(ctx.currentTime, nextStartTimeRef.current);
     source.start(startTime);
@@ -46,8 +60,10 @@ export const useLiveAudio = () => {
   };
 
   const stopLiveAudio = () => {
-    outputAudioContextRef.current?.close();
-    outputAudioContextRef.current = new window.AudioContext({ sampleRate: AUDIO_CONFIG.SAMPLE_RATE });
+    activeSourcesRef.current.forEach(source => {
+      try { source.stop(); } catch (e) {}
+    });
+    activeSourcesRef.current = [];
     nextStartTimeRef.current = 0;
   };
 
@@ -65,12 +81,20 @@ export const useLiveAudio = () => {
 
   const startLiveSession = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // 1. Create AudioContexts synchronously FIRST to guarantee browser allows audio!
       const audioContext = new window.AudioContext({ sampleRate: AUDIO_CONFIG.INPUT_SAMPLE_RATE });
       audioContextRef.current = audioContext;
       
-      outputAudioContextRef.current = new window.AudioContext({ sampleRate: AUDIO_CONFIG.SAMPLE_RATE });
+      const outputAudioContext = new window.AudioContext();
+      outputAudioContextRef.current = outputAudioContext;
       nextStartTimeRef.current = 0;
+      
+      // Force contexts to resume immediately during the user gesture
+      if (audioContext.state === 'suspended') await audioContext.resume();
+      if (outputAudioContext.state === 'suspended') await outputAudioContext.resume();
+
+      // 2. NOW we can await the microphone permissions!
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
       await audioContext.audioWorklet.addModule('/audio-processor.js');
       const workletNode = new AudioWorkletNode(audioContext, 'audio-processor');
@@ -98,6 +122,7 @@ export const useLiveAudio = () => {
         callbacks: {
           onopen: () => setIsLiveMode(true),
           onmessage: async (message: any) => {
+            console.log("SERVER MESSAGE:", message);
             const parts = message.serverContent?.modelTurn?.parts || [];
             
             for (const part of parts) {
@@ -146,7 +171,8 @@ export const useLiveAudio = () => {
             }
             
             if (message.serverContent?.interrupted) {
-              stopLiveAudio();
+              console.log("⚠️ SERVER SENT INTERRUPT SIGNAL!");
+              // stopLiveAudio(); // Temporarily disabled to see if this is causing the silence!
             }
           },
           onclose: () => stopLiveSession(),
@@ -158,37 +184,38 @@ export const useLiveAudio = () => {
       });
 
       liveSessionRef.current = session;
+      
 
-      let audioBuffer: number[] = [];
+      // Kick off the conversation so she responds out loud
+      session.sendClientContent({
+        turns: [{
+          role: 'user',
+          parts: [{ text: "Hello Aura. We have just connected to the live session! Please say hello out loud!" }]
+        }],
+        turnComplete: true
+      });
+
       workletNode.port.onmessage = (event) => {
         if (!liveSessionRef.current) return;
         
         const rawBuffer = event.data;
         const bytes = new Uint8Array(rawBuffer);
-        for (let i = 0; i < bytes.byteLength; i++) {
-          audioBuffer.push(bytes[i]);
-        }
         
-        if (audioBuffer.length >= 4096) {
-          const chunk = audioBuffer.slice(0, 4096);
-          audioBuffer = audioBuffer.slice(4096);
-          
-          let binary = '';
-          for (let i = 0; i < chunk.length; i++) {
-            binary += String.fromCharCode(chunk[i]);
-          }
-          const base64Data = btoa(binary);
-          
-          try {
-            liveSessionRef.current.sendRealtimeInput({
-              audio: {
-                mimeType: `audio/pcm;rate=${AUDIO_CONFIG.INPUT_SAMPLE_RATE}`,
-                data: base64Data
-              }
-            });
-          } catch (e) {
-            // Ignore send errors if closing
-          }
+        let binary = '';
+        for (let i = 0; i < bytes.byteLength; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        const base64Data = btoa(binary);
+        
+        try {
+          liveSessionRef.current.sendRealtimeInput({
+            audio: {
+              mimeType: `audio/pcm;rate=${AUDIO_CONFIG.INPUT_SAMPLE_RATE}`,
+              data: base64Data
+            }
+          });
+        } catch (e) {
+          // Ignore send errors if closing
         }
       };
 
