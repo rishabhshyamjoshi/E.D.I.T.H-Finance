@@ -113,8 +113,7 @@ export const useLiveAudio = () => {
           tools: [{
             functionDeclarations: [
               { name: 'execute_agents', description: 'Executes the AI agents to generate the interactive financial plan for the user.' },
-              { name: 'change_mode', description: 'Changes the profile mode to either synthetic, manual, or parse.', parameters: { type: Type.OBJECT, properties: { mode: { type: Type.STRING } }, required: ['mode'] } },
-              { name: 'generate_synthetic_profile', description: 'Generates a random synthetic profile for the user.' },
+              { name: 'change_mode', description: 'Changes the profile mode to either manual or parse.', parameters: { type: Type.OBJECT, properties: { mode: { type: Type.STRING } }, required: ['mode'] } },
               { name: 'parse_notes', description: 'Parses the user provided raw notes into a structured profile.' }
             ]
           }]
@@ -129,25 +128,6 @@ export const useLiveAudio = () => {
               // Handle function calls
               if (part.functionCall) {
                 const funcCall = part.functionCall;
-                if (funcCall.name === 'generate_synthetic_profile') {
-                  window.dispatchEvent(new CustomEvent('aura_voice_command', { 
-                    detail: { 
-                      name: funcCall.name, 
-                      args: funcCall.args,
-                      callback: (profileData: any) => {
-                         if (!liveSessionRef.current) return;
-                         (liveSessionRef.current as any).sendToolResponse({
-                           functionResponses: [{
-                             id: funcCall.id,
-                             name: funcCall.name,
-                             response: { result: `Synthetic profile generated: ${JSON.stringify(profileData)}. You MUST read out a summary of this profile to the user, including their name, age, net worth, and a couple of their goals. Act as if you just generated this for them.` }
-                           }]
-                         });
-                      }
-                    } 
-                  }));
-                  continue; // Wait for callback from UI
-                }
                 window.dispatchEvent(new CustomEvent('aura_voice_command', { detail: { name: funcCall.name, args: funcCall.args } }));
                 const resultStr = `Command ${funcCall.name} dispatched to the UI successfully. Please tell the user that the UI is updating.`;
                 if (liveSessionRef.current) {
