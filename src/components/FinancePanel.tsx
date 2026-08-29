@@ -102,10 +102,6 @@ export const FinancePanel = () => {
         runAgentFlow(profile, true);
       } else if (name === 'change_mode') {
         if (args?.mode) setProfileMode(args.mode.toLowerCase());
-      } else if (name === 'generate_synthetic_profile') {
-        setProfileMode('synthetic');
-        const newProfile = await handleGenerateAndRunProfile();
-        if (callback) callback(newProfile);
       } else if (name === 'parse_notes') {
         setProfileMode('parse');
         handleParseSubmit();
