@@ -99,7 +99,7 @@ export const verifyNumbers = async (rawPlan: string, explanation: string, onRetr
   ${explanation}
   
   Task:
-  1. Audit the numbers to ensure they match mathematically (e.g. percentages add up, allocations do not exceed income).
+  1. Audit the numbers to ensure they match mathematically. Allow for minor percentage rounding errors (e.g., 99.9% to 100.1% is perfectly acceptable) as long as the raw dollar amounts do not exceed the available income/surplus.
   2. Ensure the explanation does not hallucinate facts not present in the Raw Plan.
   
   Return ONLY valid JSON matching this schema:
