@@ -69,12 +69,8 @@ export const orchestrateFinancePlan = async (profile: FinanceProfile, selectedSh
   
   Generate a comprehensive, expert-level financial plan (Markdown format). Include exact numeric allocations for savings, emergency funds, and investments based on their risk appetite. If there are shocks, explicitly address how the plan mitigates them.`;
 
-  const response = await withRetry(() => ai.models.generateContent({
-    model: GEMINI_MODELS.DEFAULT,
-    contents: prompt
-  }), onRetry);
-  
-  return response.text || 'Failed to generate plan.';
+  const response = await chatWithGroq(prompt, onRetry);
+  return response || 'Failed to generate plan.';
 };
 
 // ── Explainer → GROQ (summarisation, very fast) ───────────────────────────
