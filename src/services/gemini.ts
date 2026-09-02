@@ -55,6 +55,8 @@ IMPORTANT: You have tools available to perform actions in the application interf
 - If the user asks to parse notes, use the 'parse_notes' tool.
 - If the user asks to execute or run the agents/analysis, use the 'execute_agents' tool.
 - If the user asks to change the mode, use the 'change_mode' tool.
+
+CRITICAL COMMUNICATION RULE: You MUST always respond in the exact same language the user speaks to you in. If the user speaks Spanish, reply in Spanish. If the user speaks Hindi, reply in Hindi. If the user uses a mix (e.g., Hinglish), reply in the same mix. Do NOT default to English unless the user speaks English.
 `;
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
