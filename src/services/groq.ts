@@ -1,22 +1,3 @@
-import Groq from 'groq-sdk';
-
-const groqApiKey = import.meta.env.VITE_GROQ_API_KEY || '';
-
-let groqClient: Groq | null = null;
-
-function getGroqClient(): Groq {
-  if (!groqClient) {
-    if (!groqApiKey) {
-      throw new Error('VITE_GROQ_API_KEY is not configured. Please add it to your .env file.');
-    }
-    groqClient = new Groq({ apiKey: groqApiKey, dangerouslyAllowBrowser: true });
-  }
-  return groqClient;
-}
-
-// Groq model to use for all agent calls
-const GROQ_MODEL = 'openai/gpt-oss-120b';
-
 // Max characters to send in a single prompt (conservative limit)
 const MAX_PROMPT_CHARS = 80000;
 
@@ -25,7 +6,6 @@ export async function chatWithGroq(
   onRetry?: (msg: string) => void,
   maxRetries = 3
 ): Promise<string> {
-  const client = getGroqClient();
   let retries = 0;
 
   // Truncate prompt to avoid token limit errors
@@ -35,34 +15,44 @@ export async function chatWithGroq(
 
   while (true) {
     try {
-      const response = await client.chat.completions.create({
-        model: GROQ_MODEL,
-        messages: [{ role: 'user', content: safePrompt }],
-        max_tokens: 4096,
+      const response = await fetch('/api/groq', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: safePrompt,
+          model: 'openai/gpt-oss-120b',
+          max_tokens: 4096,
+        })
       });
-      return response.choices[0]?.message?.content || 'No response from Groq.';
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Server responded with status ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data.choices?.[0]?.message?.content || 'No response from Groq proxy.';
     } catch (error: any) {
       if (retries >= maxRetries) {
         throw error;
       }
 
       const isRetryable =
-        error.status === 503 ||
-        error.status === 429 ||
         error.message?.includes('503') ||
         error.message?.includes('429') ||
-        error.message?.includes('rate limit');
+        error.message?.includes('rate limit') ||
+        error.message?.includes('fetch failed');
 
       if (!isRetryable) {
         throw error;
       }
 
       retries++;
-      const waitTime = Math.pow(2, retries) * 5000; // 10s, 20s, 40s
+      const delayMs = retries * 2000;
       if (onRetry) {
-        onRetry(`[Groq] Rate limit hit. Retrying in ${waitTime / 1000}s... (Attempt ${retries}/${maxRetries})`);
+        onRetry(`[Groq Proxy] Rate limit hit. Retrying in ${delayMs / 1000}s... (Attempt ${retries}/${maxRetries})`);
       }
-      await new Promise(resolve => setTimeout(resolve, waitTime));
+      await new Promise(resolve => setTimeout(resolve, delayMs));
     }
   }
 }

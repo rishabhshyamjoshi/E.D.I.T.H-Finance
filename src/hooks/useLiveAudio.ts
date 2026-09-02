@@ -79,7 +79,21 @@ export const useLiveAudio = () => {
     setIsLiveMode(false);
   };
 
-  const startLiveSession = async () => {
+  const startLiveSession = async (targetProfile: any | null) => {
+    if (!targetProfile) return;
+    
+    // Fetch API key dynamically to avoid exposing VITE_ keys in static bundle
+    let liveApiKey = '';
+    try {
+      const resp = await fetch('/api/config');
+      const data = await resp.json();
+      liveApiKey = data.geminiApiKey;
+      if (!liveApiKey) throw new Error('No API key returned');
+    } catch (e) {
+      console.error('Failed to fetch Gemini config:', e);
+      return;
+    }
+
     try {
       // 1. Create AudioContexts synchronously FIRST to guarantee browser allows audio!
       const audioContext = new window.AudioContext({ sampleRate: AUDIO_CONFIG.INPUT_SAMPLE_RATE });
@@ -108,7 +122,7 @@ export const useLiveAudio = () => {
 
       const source = audioContext.createMediaStreamSource(stream);
 
-      const session = await getAIInstance().live.connect({
+      const session = await getAIInstance(liveApiKey).live.connect({
         model: GEMINI_MODELS.LIVE,
         config: {
           responseModalities: [Modality.AUDIO],

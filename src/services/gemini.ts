@@ -7,42 +7,30 @@ const apiKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY
 // Secondary key: Orchestrator agent only
 const orchestratorApiKey = import.meta.env.VITE_GEMINI_API_KEY_ORCHESTRATOR || process.env.GEMINI_API_KEY_ORCHESTRATOR || '';
 
-let ai: GoogleGenAI;
-let orchestratorAI: GoogleGenAI;
+let ai: GoogleGenAI | null = null;
+let orchestratorAI: GoogleGenAI | null = null;
 
-function getAI(): GoogleGenAI {
+function getAI(dynamicKey?: string): GoogleGenAI {
+  if (!ai && dynamicKey) {
+    ai = new GoogleGenAI({ apiKey: dynamicKey });
+  }
   if (!ai) {
-    if (!apiKey) {
-      throw new Error(
-        'GEMINI_API_KEY is not configured. Please create a .env file from .env.example and add your API key.'
-      );
-    }
-    ai = new GoogleGenAI({ apiKey });
+    throw new Error('GEMINI_API_KEY is not configured. Please pass a dynamic key or add it to your .env file.');
   }
   return ai;
 }
 
-export function getOrchestratorAI(): GoogleGenAI {
+export function getOrchestratorAI(dynamicKey?: string): GoogleGenAI {
+  if (!orchestratorAI && dynamicKey) {
+    orchestratorAI = new GoogleGenAI({ apiKey: dynamicKey });
+  }
   if (!orchestratorAI) {
-    const key = orchestratorApiKey || apiKey; // fallback to primary if not set
-    if (!key) {
-      throw new Error('No Gemini API key configured.');
-    }
-    orchestratorAI = new GoogleGenAI({ apiKey: key });
+    throw new Error('No Gemini API key configured.');
   }
   return orchestratorAI;
 }
 
 export { getAI as getAIInstance };
-
-// Always use getAIInstance() to access the primary AI client
-// This ensures it is initialized before use
-if (apiKey) {
-  ai = new GoogleGenAI({ apiKey });
-}
-if (orchestratorApiKey) {
-  orchestratorAI = new GoogleGenAI({ apiKey: orchestratorApiKey });
-}
 
 export const SYSTEM_INSTRUCTION = `
 You are Aura, a high-end banking Relationship Manager AI.
@@ -111,7 +99,14 @@ export async function chatWithAura(message: string, history: { role: 'user' | 'm
 }
 
 export async function speakWithAura(text: string) {
-  const client = getAI();
+  let client;
+  try {
+    client = getAI();
+  } catch (e) {
+    const resp = await fetch('/api/config');
+    const data = await resp.json();
+    client = getAI(data.geminiApiKey);
+  }
   const model = GEMINI_MODELS.TTS;
 
   const response = await client.models.generateContent({
