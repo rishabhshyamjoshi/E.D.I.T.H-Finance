@@ -69,12 +69,8 @@ export const orchestrateFinancePlan = async (profile: FinanceProfile, selectedSh
   
   Generate a comprehensive, expert-level financial plan (Markdown format). Include exact numeric allocations for savings, emergency funds, and investments based on their risk appetite. If there are shocks, explicitly address how the plan mitigates them.`;
 
-  const response = await withRetry(() => ai.models.generateContent({
-    model: GEMINI_MODELS.DEFAULT,
-    contents: prompt
-  }), onRetry);
-  
-  return response.text || 'Failed to generate plan.';
+  const response = await chatWithGroq(prompt, onRetry);
+  return response || 'Failed to generate plan.';
 };
 
 // ── Explainer → GROQ (summarisation, very fast) ───────────────────────────
@@ -86,12 +82,8 @@ export const generateExplanation = async (rawPlan: string, onRetry?: (msg: strin
   
   Translate this plan into a simple, easy-to-understand summary for the client. Use bullet points and clear, encouraging language. Remove complex jargon. (Markdown format)`;
 
-  const ai = getOrchestratorAI();
-  const response = await withRetry(() => ai.models.generateContent({
-    model: GEMINI_MODELS.DEFAULT,
-    contents: prompt
-  }), onRetry);
-  return response.text || 'Explanation failed to generate.';
+  const response = await chatWithGroq(prompt, onRetry);
+  return response || 'Explanation failed to generate.';
 };
 
 // ── Verifier → GROQ (JSON structured output) ──────────────────────────────
@@ -132,10 +124,6 @@ export const generateChallenge = async (profile: FinanceProfile, rawPlan: string
   
   Critique this plan. What are the hidden risks? What happens if the market crashes? Is the risk appetite too high/low for their goals? Provide 3 sharp, critical bullet points. (Markdown format)`;
 
-  const ai = getOrchestratorAI();
-  const response = await withRetry(() => ai.models.generateContent({
-    model: GEMINI_MODELS.DEFAULT,
-    contents: prompt
-  }), onRetry);
-  return response.text || 'Challenge failed to generate.';
+  const response = await chatWithGroq(prompt, onRetry);
+  return response || 'Challenge failed to generate.';
 };

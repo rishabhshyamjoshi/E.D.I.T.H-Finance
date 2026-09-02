@@ -44,18 +44,21 @@ export const useAgentOrchestrator = (onFlowComplete?: (report: ReportData) => vo
       addTermLog("Orchestrator finished generating raw plans.", "success");
       
       // Step 2: Explainer
+      await new Promise(r => setTimeout(r, 4000));
       setActiveAgent('Explainer');
       addTermLog("Explainer started: Translating plan into accessible summary...", "info");
       const expl = await generateExplanation(rawPlan, (msg) => addTermLog(msg, "error"));
       addTermLog("Explainer finished summary translation.", "success");
       
       // Step 3: Verifier
+      await new Promise(r => setTimeout(r, 4000));
       setActiveAgent('Verifier');
       addTermLog("Verifier started: Auditing numbers and checking for hallucinations...", "info");
       const verif = await verifyNumbers(rawPlan, expl, (msg) => addTermLog(msg, "error"));
       addTermLog(verif.message, verif.verified ? "success" : "error");
       
       // Step 4: Challenger
+      await new Promise(r => setTimeout(r, 4000));
       setActiveAgent('Challenger');
       addTermLog("Challenger started: Stress-testing plan and seeking flaws...", "info");
       const chal = await generateChallenge(targetProfile, rawPlan, (msg) => addTermLog(msg, "error"));
