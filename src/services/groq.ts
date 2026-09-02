@@ -15,7 +15,7 @@ function getGroqClient(): Groq {
 }
 
 // Groq model to use for all agent calls
-const GROQ_MODEL = 'llama-3.3-70b-versatile';
+const GROQ_MODEL = 'openai/gpt-oss-20b';
 
 // Max characters to send in a single prompt (conservative limit)
 const MAX_PROMPT_CHARS = 80000;
