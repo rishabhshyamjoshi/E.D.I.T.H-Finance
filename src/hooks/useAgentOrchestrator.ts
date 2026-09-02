@@ -43,22 +43,23 @@ export const useAgentOrchestrator = (onFlowComplete?: (report: ReportData) => vo
       const rawPlan = await orchestrateFinancePlan(targetProfile, [], (msg) => addTermLog(msg, "error"));
       addTermLog("Orchestrator finished generating raw plans.", "success");
       
-      // Step 2 & 3: Explainer and Challenger (Parallel)
+      // Step 2: Explainer
       setActiveAgent('Explainer');
-      addTermLog("Explainer and Challenger started in parallel...", "info");
+      addTermLog("Explainer started: Translating plan into accessible summary...", "info");
+      const expl = await generateExplanation(rawPlan, (msg) => addTermLog(msg, "error"));
+      addTermLog("Explainer finished summary translation.", "success");
       
-      const [expl, chal] = await Promise.all([
-        generateExplanation(rawPlan, (msg) => addTermLog(msg, "error")),
-        generateChallenge(targetProfile, rawPlan, (msg) => addTermLog(msg, "error"))
-      ]);
-      
-      addTermLog("Explainer and Challenger completed their tasks.", "success");
-      
-      // Step 4: Verifier
+      // Step 3: Verifier
       setActiveAgent('Verifier');
       addTermLog("Verifier started: Auditing numbers and checking for hallucinations...", "info");
       const verif = await verifyNumbers(rawPlan, expl, (msg) => addTermLog(msg, "error"));
       addTermLog(verif.message, verif.verified ? "success" : "error");
+      
+      // Step 4: Challenger
+      setActiveAgent('Challenger');
+      addTermLog("Challenger started: Stress-testing plan and seeking flaws...", "info");
+      const chal = await generateChallenge(targetProfile, rawPlan, (msg) => addTermLog(msg, "error"));
+      addTermLog("Challenger completed stress-test.", "success");
       
       // Complete
       setActiveAgent('Complete');
