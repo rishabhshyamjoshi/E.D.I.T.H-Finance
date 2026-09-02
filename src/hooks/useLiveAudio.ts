@@ -176,7 +176,7 @@ export const useLiveAudio = () => {
       session.sendClientContent({
         turns: [{
           role: 'user',
-          parts: [{ text: "Hello Aura. We have just connected to the live session! Please say hello out loud!" }]
+          parts: [{ text: "[SYSTEM PING]: Session connected successfully. Awaiting user input. Please provide a very brief greeting acknowledging you are listening (no specific language required yet)." }]
         }],
         turnComplete: true
       });
