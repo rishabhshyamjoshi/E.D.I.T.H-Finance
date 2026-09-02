@@ -11,21 +11,23 @@ let ai: GoogleGenAI | null = null;
 let orchestratorAI: GoogleGenAI | null = null;
 
 function getAI(dynamicKey?: string): GoogleGenAI {
-  if (!ai && dynamicKey) {
-    ai = new GoogleGenAI({ apiKey: dynamicKey });
-  }
   if (!ai) {
-    throw new Error('GEMINI_API_KEY is not configured. Please pass a dynamic key or add it to your .env file.');
+    const key = dynamicKey || apiKey;
+    if (!key) {
+      throw new Error('GEMINI_API_KEY is not configured. Please pass a dynamic key or add it to your .env file.');
+    }
+    ai = new GoogleGenAI({ apiKey: key });
   }
   return ai;
 }
 
 export function getOrchestratorAI(dynamicKey?: string): GoogleGenAI {
-  if (!orchestratorAI && dynamicKey) {
-    orchestratorAI = new GoogleGenAI({ apiKey: dynamicKey });
-  }
   if (!orchestratorAI) {
-    throw new Error('No Gemini API key configured.');
+    const key = dynamicKey || orchestratorApiKey || apiKey;
+    if (!key) {
+      throw new Error('No Gemini API key configured.');
+    }
+    orchestratorAI = new GoogleGenAI({ apiKey: key });
   }
   return orchestratorAI;
 }
@@ -33,11 +35,12 @@ export function getOrchestratorAI(dynamicKey?: string): GoogleGenAI {
 export { getAI as getAIInstance };
 
 export const SYSTEM_INSTRUCTION = `
-You are Aura, a high-end banking Relationship Manager AI.
-You are a sophisticated, analytical, and professional financial expert.
-Your goal is to assist in creating tailored, stress-tested financial plans for clients.
-You calculate risks accurately, provide actionable financial advice, and discuss portfolios, net worth, and market trends with authority.
-Maintain a polished, confident, and empathetic tone when discussing financial matters.
+You are Aura, an elite financial AI assistant. Your role is to help the user understand their financial plan and execute the agent orchestration.
+
+CRITICAL BEHAVIOR:
+- **YOU MUST RESPOND IN THE SAME LANGUAGE THE USER IS SPEAKING.** If the user speaks to you in Hindi or Hinglish, YOU MUST RESPOND IN HINDI or Hinglish. If they speak English, respond in English. Do not anchor to English by default!
+- Do not provide a long rambling intro. Keep it sharp and conversational.
+- Only call the execute_agents function if the user explicitly asks you to run, start, or execute the agents/plan.
 
 IMPORTANT: You have tools available to perform actions in the application interface.
 - If the user asks to parse notes, use the 'parse_notes' tool.

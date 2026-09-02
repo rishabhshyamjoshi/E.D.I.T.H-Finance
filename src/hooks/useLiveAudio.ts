@@ -11,7 +11,7 @@ export interface ChatMessage {
 export const useLiveAudio = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLiveMode, setIsLiveMode] = useState(false);
-  
+
   const liveSessionRef = useRef<any>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const workletNodeRef = useRef<AudioWorkletNode | null>(null);
@@ -24,7 +24,7 @@ export const useLiveAudio = () => {
     const buffer = new ArrayBuffer(binary.length);
     const bytes = new Uint8Array(buffer);
     for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    
+
     const int16Data = new Int16Array(buffer);
     const float32Data = new Float32Array(int16Data.length);
     for (let i = 0; i < int16Data.length; i++) {
@@ -33,7 +33,7 @@ export const useLiveAudio = () => {
 
     const ctx = outputAudioContextRef.current;
     if (!ctx) return;
-    
+
     try {
       if (ctx.state === 'suspended') {
         await ctx.resume();
@@ -48,7 +48,7 @@ export const useLiveAudio = () => {
     const source = ctx.createBufferSource();
     source.buffer = audioBuffer;
     source.connect(ctx.destination);
-    
+
     activeSourcesRef.current.push(source);
     source.onended = () => {
       activeSourcesRef.current = activeSourcesRef.current.filter(s => s !== source);
@@ -61,27 +61,29 @@ export const useLiveAudio = () => {
 
   const stopLiveAudio = () => {
     activeSourcesRef.current.forEach(source => {
-      try { source.stop(); } catch (e) {}
+      try { source.stop(); } catch (e) { }
     });
     activeSourcesRef.current = [];
     nextStartTimeRef.current = 0;
   };
 
   const stopLiveSession = () => {
-    liveSessionRef.current?.close();
+    try {
+      liveSessionRef.current?.close();
+    } catch(e) {}
     liveSessionRef.current = null;
-    workletNodeRef.current?.disconnect();
+    try { workletNodeRef.current?.disconnect(); } catch(e) {}
     workletNodeRef.current = null;
-    audioContextRef.current?.close();
+    try { audioContextRef.current?.close(); } catch(e) {}
     audioContextRef.current = null;
-    outputAudioContextRef.current?.close();
+    try { outputAudioContextRef.current?.close(); } catch(e) {}
     outputAudioContextRef.current = null;
     setIsLiveMode(false);
   };
 
   const startLiveSession = async (targetProfile: any | null) => {
     if (!targetProfile) return;
-    
+
     // Fetch API key dynamically to avoid exposing VITE_ keys in static bundle
     let liveApiKey = '';
     try {
@@ -98,11 +100,11 @@ export const useLiveAudio = () => {
       // 1. Create AudioContexts synchronously FIRST to guarantee browser allows audio!
       const audioContext = new window.AudioContext({ sampleRate: AUDIO_CONFIG.INPUT_SAMPLE_RATE });
       audioContextRef.current = audioContext;
-      
+
       const outputAudioContext = new window.AudioContext();
       outputAudioContextRef.current = outputAudioContext;
       nextStartTimeRef.current = 0;
-      
+
       // Force contexts to resume immediately during the user gesture
       if (audioContext.state === 'suspended') await audioContext.resume();
       if (outputAudioContext.state === 'suspended') await outputAudioContext.resume();
@@ -143,7 +145,7 @@ export const useLiveAudio = () => {
           onmessage: async (message: any) => {
             console.log("SERVER MESSAGE:", message);
             const parts = message.serverContent?.modelTurn?.parts || [];
-            
+
             for (const part of parts) {
               // Handle function calls
               if (part.functionCall) {
@@ -169,7 +171,7 @@ export const useLiveAudio = () => {
                 setMessages(prev => [...prev, { role: 'model', text: part.text }]);
               }
             }
-            
+
             if (message.serverContent?.interrupted) {
               console.log("⚠️ SERVER SENT INTERRUPT SIGNAL!");
               // stopLiveAudio(); // Temporarily disabled to see if this is causing the silence!
@@ -177,36 +179,26 @@ export const useLiveAudio = () => {
           },
           onclose: () => stopLiveSession(),
           onerror: (err: any) => {
-             console.error("Live API Error:", err);
-             stopLiveSession();
+            console.error("Live API Error:", err);
+            stopLiveSession();
           }
         }
       });
 
       liveSessionRef.current = session;
       
-
-      // Kick off the conversation so she responds out loud
-      session.sendClientContent({
-        turns: [{
-          role: 'user',
-          parts: [{ text: "[SYSTEM PING]: Session connected successfully. Awaiting user input. Please provide a very brief greeting acknowledging you are listening (no specific language required yet)." }]
-        }],
-        turnComplete: true
-      });
-
       workletNode.port.onmessage = (event) => {
         if (!liveSessionRef.current) return;
-        
+
         const rawBuffer = event.data;
         const bytes = new Uint8Array(rawBuffer);
-        
+
         let binary = '';
         for (let i = 0; i < bytes.byteLength; i++) {
           binary += String.fromCharCode(bytes[i]);
         }
         const base64Data = btoa(binary);
-        
+
         try {
           liveSessionRef.current.sendRealtimeInput({
             audio: {
@@ -220,23 +212,23 @@ export const useLiveAudio = () => {
       };
 
       source.connect(workletNode);
-      
+
       // Mute the local microphone playback to prevent feedback/buzzing
       const muteNode = audioContext.createGain();
       muteNode.gain.value = 0;
       workletNode.connect(muteNode);
       muteNode.connect(audioContext.destination);
-      
+
     } catch (err: any) {
       console.error("Failed to start live session:", err);
       let errorMsg = err?.message || err?.toString() || 'Unknown error';
-      
+
       if (!navigator.mediaDevices) {
         errorMsg = "Microphone access blocked. If using a network IP, switch to localhost or HTTPS.";
       }
-      
+
       window.alert(`❌ Voice connection failed:\n\n${errorMsg}`);
-      
+
       setMessages(prev => [...prev, { role: 'model', text: `❌ Voice link failed: ${errorMsg}. Check browser console for details.` }]);
       setIsLiveMode(false);
     }

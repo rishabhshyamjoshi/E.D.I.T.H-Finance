@@ -4,7 +4,9 @@ const MAX_PROMPT_CHARS = 80000;
 export async function chatWithGroq(
   prompt: string,
   onRetry?: (msg: string) => void,
-  maxRetries = 3
+  maxRetries = 3,
+  model = 'openai/gpt-oss-120b',
+  maxTokens = 2048
 ): Promise<string> {
   let retries = 0;
 
@@ -20,14 +22,18 @@ export async function chatWithGroq(
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           prompt: safePrompt,
-          model: 'openai/gpt-oss-120b',
-          max_tokens: 4096,
+          model: model,
+          max_tokens: maxTokens,
         })
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `Server responded with status ${response.status}`);
+        let errMsg = `Server responded with status ${response.status}`;
+        if (errorData.error) {
+          errMsg = typeof errorData.error === 'object' ? (errorData.error.message || JSON.stringify(errorData.error)) : errorData.error;
+        }
+        throw new Error(errMsg);
       }
 
       const data = await response.json();
