@@ -33,19 +33,6 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
-  
-  @media print {
-    @page { size: portrait; margin: 1cm; }
-    body {
-      @apply bg-white text-black overflow-visible block h-auto;
-      background-image: none !important;
-      -webkit-print-color-adjust: exact;
-      print-color-adjust: exact;
-    }
-    * {
-      @apply print:text-black;
-    }
-  }
 }
 
 @layer utilities {

@@ -112,10 +112,10 @@ export const FinancePanel = () => {
   }, [profile, runAgentFlow]);
 
   return (
-    <div className="flex h-full font-sans bg-[#0B1120] text-slate-300 overflow-hidden print:block print:h-auto print:overflow-visible print:bg-white print:text-black">
+    <div className="flex h-full font-sans bg-[#0B1120] text-slate-300 overflow-hidden">
       
       {/* Left Sidebar */}
-      <div className="w-[280px] bg-[#0F172A] border-r border-white/5 flex flex-col h-full flex-shrink-0 z-10 m-4 rounded-xl border print:hidden">
+      <div className="w-[280px] bg-[#0F172A] border-r border-white/5 flex flex-col h-full flex-shrink-0 z-10 m-4 rounded-xl border">
         
         {/* Profile Tabs */}
         <div className="p-5 pb-2">
@@ -224,18 +224,18 @@ export const FinancePanel = () => {
       </div>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0 p-6 overflow-y-auto print:p-0 print:block print:overflow-visible">
+      <div className="flex-1 flex flex-col min-w-0 p-6 overflow-y-auto">
         
         {/* Header */}
         <header className="flex justify-between items-end mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-white tracking-tight flex items-center gap-3 print:text-black">
-              <Brain className="w-8 h-8 text-emerald-400 print:text-emerald-600" /> E.D.I.T.H.
+            <h1 className="text-3xl font-bold text-white tracking-tight flex items-center gap-3">
+              <Brain className="w-8 h-8 text-emerald-400" /> E.D.I.T.H.
             </h1>
-            <p className="text-slate-400 text-sm mt-1 ml-11 print:text-slate-600">Tactical Financial Intelligence</p>
+            <p className="text-slate-400 text-sm mt-1 ml-11">Tactical Financial Intelligence</p>
           </div>
           {profile && (
-            <div className="flex gap-2 print:hidden">
+            <div className="flex gap-2">
               <button 
                 onClick={() => window.print()} 
                 className="px-4 py-2 bg-[#1E293B] hover:bg-slate-700 text-sm font-medium rounded-lg transition-colors border border-white/10"
@@ -273,10 +273,10 @@ export const FinancePanel = () => {
 
         {/* Results Area */}
         {profile && (
-          <div className="flex-1 grid grid-cols-12 gap-6 min-h-0 print:block print:min-h-auto print:space-y-6">
+          <div className="flex-1 grid grid-cols-12 gap-6 min-h-0">
             
             {/* Middle Column: Visualizations & Output */}
-            <div className="col-span-8 flex flex-col gap-6 h-full print:block print:h-auto">
+            <div className="col-span-8 flex flex-col gap-6 h-full">
               {activeTab === 'overview' && (
                 <OverviewView 
                   profile={profile} 
@@ -315,7 +315,7 @@ export const FinancePanel = () => {
             </div>
 
             {/* Right Column: Terminal Logs & Agent Status */}
-            <div className="col-span-4 flex flex-col gap-6 print:hidden">
+            <div className="col-span-4 flex flex-col gap-6">
                <div className="bg-[#0F172A] rounded-xl border border-white/10 overflow-hidden flex-1 shadow-2xl flex flex-col">
                  <div className="bg-[#1E293B] px-4 py-2 border-b border-white/5 flex items-center gap-2">
                    <Terminal className="w-4 h-4 text-slate-400" />
