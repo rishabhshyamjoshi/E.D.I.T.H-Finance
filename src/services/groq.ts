@@ -15,8 +15,7 @@ function getGroqClient(): Groq {
 }
 
 // Groq model to use for all agent calls
-// openai/gpt-oss-20b: 131k context, lower cost = higher rate limits on free tier
-const GROQ_MODEL = 'openai/gpt-oss-20b';
+const GROQ_MODEL = 'llama-3.3-70b-versatile';
 
 // Max characters to send in a single prompt (conservative limit)
 const MAX_PROMPT_CHARS = 80000;

@@ -1,4 +1,5 @@
 import { getAIInstance, getOrchestratorAI, withRetry } from './gemini';
+import { chatWithGroq } from './groq';
 import { GEMINI_MODELS } from '../config/constants';
 
 export interface FinanceProfile {
@@ -45,12 +46,7 @@ export const computeProfileFromData = async (rawData: string, onRetry?: (msg: st
   }
   Do not include markdown blocks, just the JSON string.`;
 
-  const response = await withRetry(() => getOrchestratorAI().models.generateContent({
-    model: GEMINI_MODELS.DEFAULT,
-    contents: prompt
-  }), onRetry);
-  
-  const text = response.text || '{}';
+  const text = await chatWithGroq(prompt, onRetry);
   const cleanJson = text.replace(/```json/g, '').replace(/```/g, '').trim();
   return JSON.parse(cleanJson);
 };
@@ -90,11 +86,8 @@ export const generateExplanation = async (rawPlan: string, onRetry?: (msg: strin
   
   Translate this plan into a simple, easy-to-understand summary for the client. Use bullet points and clear, encouraging language. Remove complex jargon. (Markdown format)`;
 
-  const response = await withRetry(() => getOrchestratorAI().models.generateContent({
-    model: GEMINI_MODELS.DEFAULT,
-    contents: prompt
-  }), onRetry);
-  return response.text || 'Explanation failed to generate.';
+  const response = await chatWithGroq(prompt, onRetry);
+  return response || 'Explanation failed to generate.';
 };
 
 // ── Verifier → GROQ (JSON structured output) ──────────────────────────────
@@ -118,12 +111,7 @@ export const verifyNumbers = async (rawPlan: string, explanation: string, onRetr
     "data": { "issuesFound": number }
   }`;
 
-  const response = await withRetry(() => getOrchestratorAI().models.generateContent({
-    model: GEMINI_MODELS.DEFAULT,
-    contents: prompt
-  }), onRetry);
-  
-  const text = response.text || '{}';
+  const text = await chatWithGroq(prompt, onRetry);
   const cleanJson = text.replace(/```json/g, '').replace(/```/g, '').trim();
   return JSON.parse(cleanJson);
 };
@@ -140,9 +128,6 @@ export const generateChallenge = async (profile: FinanceProfile, rawPlan: string
   
   Critique this plan. What are the hidden risks? What happens if the market crashes? Is the risk appetite too high/low for their goals? Provide 3 sharp, critical bullet points. (Markdown format)`;
 
-  const response = await withRetry(() => getOrchestratorAI().models.generateContent({
-    model: GEMINI_MODELS.DEFAULT,
-    contents: prompt
-  }), onRetry);
-  return response.text || 'Challenge failed to generate.';
+  const response = await chatWithGroq(prompt, onRetry);
+  return response || 'Challenge failed to generate.';
 };
