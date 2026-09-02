@@ -94,7 +94,13 @@ export const useLiveAudio = () => {
       if (outputAudioContext.state === 'suspended') await outputAudioContext.resume();
 
       // 2. NOW we can await the microphone permissions!
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        }
+      });
 
       await audioContext.audioWorklet.addModule('/audio-processor.js');
       const workletNode = new AudioWorkletNode(audioContext, 'audio-processor');
@@ -200,7 +206,12 @@ export const useLiveAudio = () => {
       };
 
       source.connect(workletNode);
-      workletNode.connect(audioContext.destination);
+      
+      // Mute the local microphone playback to prevent feedback/buzzing
+      const muteNode = audioContext.createGain();
+      muteNode.gain.value = 0;
+      workletNode.connect(muteNode);
+      muteNode.connect(audioContext.destination);
       
     } catch (err: any) {
       console.error("Failed to start live session:", err);
