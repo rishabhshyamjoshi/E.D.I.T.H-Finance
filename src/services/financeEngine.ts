@@ -67,7 +67,9 @@ export const orchestrateFinancePlan = async (profile: FinanceProfile, selectedSh
   Past Trends: ${profile.pastTrends}
   ${shockText}
   
-  Generate a comprehensive, expert-level financial plan (Markdown format). Include exact numeric allocations for savings, emergency funds, and investments based on their risk appetite. If there are shocks, explicitly address how the plan mitigates them.`;
+  Generate a comprehensive, expert-level financial plan (Markdown format). Include exact numeric allocations for savings, emergency funds, and investments based on their risk appetite. If there are shocks, explicitly address how the plan mitigates them.
+  
+  CRITICAL: You MUST verify your own math. Ensure all percentage allocations add up to exactly 100%. The total monthly dollar allocations (savings + investments + emergency) MUST NOT exceed the client's available monthly surplus (Monthly Income - Monthly Expenses). Flawless mathematical consistency is required.`;
 
   const response = await chatWithGroq(prompt, onRetry);
   return response || 'Failed to generate plan.';
